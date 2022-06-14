@@ -35,11 +35,22 @@ import android.util.Size;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.volley.AuthFailureError;
+import com.android.volley.NetworkResponse;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.VolleyLog;
+import com.android.volley.toolbox.HttpHeaderParser;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.mlkit.vision.common.InputImage;
@@ -49,8 +60,14 @@ import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
 import org.tensorflow.lite.examples.detection.customview.OverlayView.DrawCallback;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
@@ -127,6 +144,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private Bitmap faceBmp = null;
 
   private FloatingActionButton fabAdd;
+  private Button reqBt;
 
   //private HashMap<String, Classifier.Recognition> knownFaces = new HashMap<>();
 
@@ -138,8 +156,19 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     fabAdd = findViewById(R.id.fab_add);
     fabAdd.setOnClickListener(new View.OnClickListener() {
       @Override
+      public void onClick(View view) {onAddClick();}
+    });
+
+    reqBt = findViewById(R.id.request_button);
+    reqBt.setOnClickListener( new View.OnClickListener() {
+      @Override
       public void onClick(View view) {
-        onAddClick();
+        try {
+          onReqBtClickPost();
+        }
+        catch (JSONException e) {
+
+        }
       }
     });
 
@@ -162,12 +191,82 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   }
 
 
-
   private void onAddClick() {
-
     addPending = true;
-    //Toast.makeText(this, "click", Toast.LENGTH_LONG ).show();
+    // Toast.makeText(this, "click", Toast.LENGTH_LONG ).show();
+  }
 
+  private void onReqBtClick() {
+    String url = "http://192.168.1.69:8080/android";
+    StringRequest stringRequest = new StringRequest(
+            Request.Method.GET,
+            url,
+            new Response.Listener<String>() {
+              @Override
+              public void onResponse(String response) {
+                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG ).show();
+              }
+            },
+            new Response.ErrorListener() {
+              @Override
+              public void onErrorResponse(VolleyError error) {
+                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
+              }
+            });
+
+    RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
+    requestQueue.add(stringRequest);
+  }
+
+  private void onReqBtClickPost() throws JSONException {
+    String url = "http://192.168.1.69:8080/android";
+    JSONObject jsonBody = new JSONObject();
+    jsonBody.put("Title", 1);
+    jsonBody.put("Author", 1);
+    final String requestBody = jsonBody.toString();
+
+    StringRequest stringRequest = new StringRequest(
+            Request.Method.POST,
+            url,
+            new Response.Listener<String>() {
+              @Override
+              public void onResponse(String response) {
+                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG).show();
+              }
+            },
+            new Response.ErrorListener() {
+              @Override
+              public void onErrorResponse(VolleyError error) {
+                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
+              }
+            }
+    ) {
+        @Override
+        public String getBodyContentType() {
+          return "application/json; charset=utf-8";
+        }
+        @Override
+        public byte[] getBody() throws AuthFailureError {
+          try {
+            return requestBody == null ? null : requestBody.getBytes("utf-8");
+          } catch (UnsupportedEncodingException uee) {
+            VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
+            return null;
+          }
+        }
+        @Override
+        protected Response<String> parseNetworkResponse(NetworkResponse response) {
+          String responseString = "";
+          if (response != null) {
+            responseString = String.valueOf(response.statusCode);
+            // can get more details such as response.headers
+          }
+          return Response.success(responseString, HttpHeaderParser.parseCacheHeaders(response));
+        }
+      };
+
+    RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
+    requestQueue.add(stringRequest);
   }
 
   @Override
@@ -391,9 +490,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     TextView tvTitle = dialogLayout.findViewById(R.id.dlg_title);
     EditText etName = dialogLayout.findViewById(R.id.dlg_input);
 
-    tvTitle.setText("Add Face");
+    tvTitle.setText("Enroll face");
     ivFace.setImageBitmap(rec.getCrop());
-    etName.setHint("Input name");
+    etName.setHint("Employee Name");
 
     builder.setPositiveButton("OK", new DialogInterface.OnClickListener(){
       @Override

@@ -52,4 +52,6 @@ dependencies {
     // added MLKit dependencies for face detector
     implementation 'com.google.mlkit:face-detection:16.0.0'
 
+    // added HTTP client
+    implementation 'com.android.volley:volley:1.2.1'
 }
