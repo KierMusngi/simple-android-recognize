@@ -17,6 +17,9 @@ package org.tensorflow.lite.examples.detection.tflite;
 
 import android.graphics.Bitmap;
 import android.graphics.RectF;
+
+import org.json.JSONArray;
+
 import java.util.List;
 
 /** Generic interface for interacting with different recognition engines. */
@@ -72,6 +75,7 @@ public interface SimilarityClassifier {
     public void setExtra(Object extra) {
         this.extra = extra;
     }
+
     public Object getExtra() {
         return this.extra;
     }

@@ -25,6 +25,7 @@ import android.graphics.Color;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Paint.Style;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.hardware.camera2.CameraCharacteristics;
@@ -53,6 +54,9 @@ import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.face.Face;
 import com.google.mlkit.vision.face.FaceDetection;
@@ -61,11 +65,13 @@ import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
@@ -84,12 +90,11 @@ import org.tensorflow.lite.examples.detection.tracking.MultiBoxTracker;
 public class DetectorActivity extends CameraActivity implements OnImageAvailableListener {
   private static final Logger LOGGER = new Logger();
 
-
   // FaceNet
-//  private static final int TF_OD_API_INPUT_SIZE = 160;
-//  private static final boolean TF_OD_API_IS_QUANTIZED = false;
-//  private static final String TF_OD_API_MODEL_FILE = "facenet.tflite";
-//  //private static final String TF_OD_API_MODEL_FILE = "facenet_hiroki.tflite";
+  //  private static final int TF_OD_API_INPUT_SIZE = 160;
+  //  private static final boolean TF_OD_API_IS_QUANTIZED = false;
+  //  private static final String TF_OD_API_MODEL_FILE = "facenet.tflite";
+  //  //private static final String TF_OD_API_MODEL_FILE = "facenet_hiroki.tflite";
 
   // MobileFaceNet
   private static final int TF_OD_API_INPUT_SIZE = 112;
@@ -182,12 +187,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
 
     FaceDetector detector = FaceDetection.getClient(options);
-
     faceDetector = detector;
-
-
+    GetRegisteredFaces();
     //checkWritePermission();
-
   }
 
 
@@ -196,7 +198,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     // Toast.makeText(this, "click", Toast.LENGTH_LONG ).show();
   }
 
-  private void onReqBtClick() {
+  // GET sample
+  private void GetRegisteredFaces() {
     String url = "http://192.168.1.69:8080/android";
     StringRequest stringRequest = new StringRequest(
             Request.Method.GET,
@@ -204,7 +207,44 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             new Response.Listener<String>() {
               @Override
               public void onResponse(String response) {
-                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG ).show();
+                try {
+                  JSONArray jsonArray=new JSONArray(response);
+                  for (int i=0;i<jsonArray.length();i++)
+                  {
+                    JSONObject jsonObject=jsonArray.getJSONObject(i);
+
+                    String name=jsonObject.getString("name");
+                    String id=jsonObject.getString("id");
+                    String title=jsonObject.getString("title");
+                    String distance=jsonObject.getString("distance");
+                    String left=jsonObject.getString("left");
+                    String right=jsonObject.getString("right");
+                    String bottom=jsonObject.getString("bottom");
+                    String top=jsonObject.getString("top");
+                    String extra=jsonObject.getString("extra");
+
+                    JsonElement extraJson = JsonParser.parseString(extra);
+                    Gson gson = new Gson();
+                    Object objectExtra = gson.fromJson(extraJson, Object.class);
+
+                    SimilarityClassifier.Recognition rec = new SimilarityClassifier.Recognition(
+                            id,
+                            title,
+                            Float.parseFloat(distance),
+                            new RectF(
+                                    Float.parseFloat(left),
+                                    Float.parseFloat(top),
+                                    Float.parseFloat(right),
+                                    Float.parseFloat(bottom)
+                            )
+                    );
+
+                    rec.setExtra(objectExtra);
+                    detector.register(name, rec);
+                  }
+                } catch (JSONException e) {
+                  e.printStackTrace();
+                }
               }
             },
             new Response.ErrorListener() {
@@ -218,11 +258,25 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     requestQueue.add(stringRequest);
   }
 
-  private void onReqBtClickPost() throws JSONException {
-    String url = "http://192.168.1.69:8080/android";
+  // POST sample
+  private void RegisterFace(String name, SimilarityClassifier.Recognition rec) throws JSONException {
+    String url = "http://192.168.1.69:8080/android/register";
     JSONObject jsonBody = new JSONObject();
-    jsonBody.put("Title", 1);
-    jsonBody.put("Author", 1);
+    jsonBody.put("name", name);
+    jsonBody.put("id", rec.getId().toString());
+    jsonBody.put("title", name);
+    jsonBody.put("distance", rec.getDistance().toString());
+
+    RectF location = rec.getLocation();
+    jsonBody.put("left", location.left);
+    jsonBody.put("right", location.right);
+    jsonBody.put("bottom", location.bottom);
+    jsonBody.put("top", location.top);
+
+    Gson gson = new Gson();
+    String json = gson.toJson(rec.getExtra());
+    jsonBody.put("extra", json);
+
     final String requestBody = jsonBody.toString();
 
     StringRequest stringRequest = new StringRequest(
@@ -264,6 +318,58 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
           return Response.success(responseString, HttpHeaderParser.parseCacheHeaders(response));
         }
       };
+
+    RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
+    requestQueue.add(stringRequest);
+  }
+
+  // POST sample
+  private void onReqBtClickPost() throws JSONException {
+    String url = "http://192.168.1.69:8080/android";
+    JSONObject jsonBody = new JSONObject();
+    jsonBody.put("Title", 1);
+    jsonBody.put("Author", 1);
+    final String requestBody = jsonBody.toString();
+
+    StringRequest stringRequest = new StringRequest(
+            Request.Method.POST,
+            url,
+            new Response.Listener<String>() {
+              @Override
+              public void onResponse(String response) {
+                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG).show();
+              }
+            },
+            new Response.ErrorListener() {
+              @Override
+              public void onErrorResponse(VolleyError error) {
+                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
+              }
+            }
+    ) {
+      @Override
+      public String getBodyContentType() {
+        return "application/json; charset=utf-8";
+      }
+      @Override
+      public byte[] getBody() throws AuthFailureError {
+        try {
+          return requestBody == null ? null : requestBody.getBytes("utf-8");
+        } catch (UnsupportedEncodingException uee) {
+          VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
+          return null;
+        }
+      }
+      @Override
+      protected Response<String> parseNetworkResponse(NetworkResponse response) {
+        String responseString = "";
+        if (response != null) {
+          responseString = String.valueOf(response.statusCode);
+          // can get more details such as response.headers
+        }
+        return Response.success(responseString, HttpHeaderParser.parseCacheHeaders(response));
+      }
+    };
 
     RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
     requestQueue.add(stringRequest);
@@ -411,10 +517,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                           }
                         });
               }
-
             });
-
-
   }
 
   @Override
@@ -481,7 +584,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   }
 
-  private void showAddFaceDialog(SimilarityClassifier.Recognition rec) {
+  private void showAddFaceDialog(SimilarityClassifier.Recognition rec){
 
     AlertDialog.Builder builder = new AlertDialog.Builder(this);
     LayoutInflater inflater = getLayoutInflater();
@@ -490,19 +593,25 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     TextView tvTitle = dialogLayout.findViewById(R.id.dlg_title);
     EditText etName = dialogLayout.findViewById(R.id.dlg_input);
 
-    tvTitle.setText("Enroll face");
+    tvTitle.setText("Enroll employee");
     ivFace.setImageBitmap(rec.getCrop());
     etName.setHint("Employee Name");
 
     builder.setPositiveButton("OK", new DialogInterface.OnClickListener(){
       @Override
-      public void onClick(DialogInterface dlg, int i) {
+      public void onClick(DialogInterface dlg, int i){
 
           String name = etName.getText().toString();
           if (name.isEmpty()) {
               return;
           }
-          detector.register(name, rec);
+          //detector.register(name, rec); // Saving the face into a hash list
+          try {
+            RegisterFace(name, rec);
+          }
+          catch (JSONException err) {
+
+          }
           //knownFaces.put(name, rec);
           dlg.dismiss();
       }
@@ -681,20 +790,13 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         result.setExtra(extra);
         result.setCrop(crop);
         mappedRecognitions.add(result);
-
       }
-
-
     }
 
     //    if (saved) {
-//      lastSaved = System.currentTimeMillis();
-//    }
+    //      lastSaved = System.currentTimeMillis();
+    //    }
 
     updateResults(currTimestamp, mappedRecognitions);
-
-
   }
-
-
 }

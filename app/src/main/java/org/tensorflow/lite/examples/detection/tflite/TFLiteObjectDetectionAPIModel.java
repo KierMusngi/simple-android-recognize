@@ -36,6 +36,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Vector;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.tensorflow.lite.Interpreter;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
@@ -94,6 +97,7 @@ public class TFLiteObjectDetectionAPIModel
   private float[][] output;
 
   private HashMap<String, Recognition> registered = new HashMap<>();
+
   public void register(String name, Recognition rec) {
       registered.put(name, rec);
   }
@@ -175,6 +179,14 @@ public class TFLiteObjectDetectionAPIModel
     Pair<String, Float> ret = null;
     for (Map.Entry<String, Recognition> entry : registered.entrySet()) {
         final String name = entry.getKey();
+
+        // Get the object extra
+        Object extra = entry.getValue().getExtra();
+
+        // Convert the extra to a array of array of floats
+
+
+        // final float[] knownEmb = ((float[][]) entry.getValue().getExtra())[0];
         final float[] knownEmb = ((float[][]) entry.getValue().getExtra())[0];
 
         float distance = 0;
@@ -189,9 +201,7 @@ public class TFLiteObjectDetectionAPIModel
     }
 
     return ret;
-
   }
-
 
   @Override
   public List<Recognition> recognizeImage(final Bitmap bitmap, boolean storeExtra) {
@@ -264,11 +274,8 @@ public class TFLiteObjectDetectionAPIModel
             distance = nearest.second;
 
             LOGGER.i("nearest: " + name + " - distance: " + distance);
-
-
         }
     }
-
 
     final int numDetectionsOutput = 1;
     final ArrayList<Recognition> recognitions = new ArrayList<>(numDetectionsOutput);
