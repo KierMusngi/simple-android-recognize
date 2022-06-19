@@ -27,11 +27,13 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -173,27 +175,31 @@ public class TFLiteObjectDetectionAPIModel
   }
 
   // looks for the nearest embeeding in the dataset (using L2 norm)
-  // and retrurns the pair <id, distance>
+  // and returns the pair <id, distance>
   private Pair<String, Float> findNearest(float[] emb) {
-
     Pair<String, Float> ret = null;
     for (Map.Entry<String, Recognition> entry : registered.entrySet()) {
         final String name = entry.getKey();
 
         // Get the object extra
         Object extra = entry.getValue().getExtra();
-
         // Convert the extra to a array of array of floats
+        ArrayList listOfExtra = (ArrayList) ((ArrayList)extra).get(0);
+        float[] arrayOfExtra = new float[listOfExtra.size()];
+        for(int i=0; i<listOfExtra.size(); i++) {
+          float get = Float.parseFloat(listOfExtra.get(i).toString());
+          arrayOfExtra[i] = get;
+        }
 
-
-        // final float[] knownEmb = ((float[][]) entry.getValue().getExtra())[0];
-        final float[] knownEmb = ((float[][]) entry.getValue().getExtra())[0];
+        //final float[] knownEmb = ((float[][]) entry.getValue().getExtra())[0];
+        final float[] knownEmb = arrayOfExtra;
 
         float distance = 0;
         for (int i = 0; i < emb.length; i++) {
               float diff = emb[i] - knownEmb[i];
               distance += diff*diff;
         }
+
         distance = (float) Math.sqrt(distance);
         if (ret == null || distance < ret.second) {
             ret = new Pair<>(name, distance);
