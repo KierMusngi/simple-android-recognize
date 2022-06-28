@@ -31,6 +31,7 @@ import android.graphics.Typeface;
 import android.hardware.camera2.CameraCharacteristics;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.SystemClock;
 import android.util.Size;
 import android.util.TypedValue;
@@ -90,12 +91,6 @@ import org.tensorflow.lite.examples.detection.tracking.MultiBoxTracker;
 public class DetectorActivity extends CameraActivity implements OnImageAvailableListener {
   private static final Logger LOGGER = new Logger();
 
-  // FaceNet
-  //  private static final int TF_OD_API_INPUT_SIZE = 160;
-  //  private static final boolean TF_OD_API_IS_QUANTIZED = false;
-  //  private static final String TF_OD_API_MODEL_FILE = "facenet.tflite";
-  //  //private static final String TF_OD_API_MODEL_FILE = "facenet_hiroki.tflite";
-
   // MobileFaceNet
   private static final int TF_OD_API_INPUT_SIZE = 112;
   private static final boolean TF_OD_API_IS_QUANTIZED = false;
@@ -128,8 +123,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   private boolean computingDetection = false;
   private boolean addPending = false;
-  //private boolean adding = false;
-
+  private boolean scanFaces = true;
   private long timestamp = 0;
 
   private Matrix frameToCropTransform;
@@ -169,7 +163,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
       @Override
       public void onClick(View view) {
         try {
-          onReqBtClickPost();
+          punch("Kyla Musngi");
         }
         catch (JSONException e) {
 
@@ -189,7 +183,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     FaceDetector detector = FaceDetection.getClient(options);
     faceDetector = detector;
     GetRegisteredFaces();
-    //checkWritePermission();
   }
 
 
@@ -259,10 +252,11 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   }
 
   // POST sample
-  private void RegisterFace(String name, SimilarityClassifier.Recognition rec) throws JSONException {
+  private void RegisterFace(String name, String position, SimilarityClassifier.Recognition rec) throws JSONException {
     String url = "http://192.168.1.69:8080/android/register";
     JSONObject jsonBody = new JSONObject();
     jsonBody.put("name", name);
+    jsonBody.put("position", position);
     jsonBody.put("id", rec.getId().toString());
     jsonBody.put("title", name);
     jsonBody.put("distance", rec.getDistance().toString());
@@ -324,11 +318,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   }
 
   // POST sample
-  private void onReqBtClickPost() throws JSONException {
-    String url = "http://192.168.1.69:8080/android";
+  private void punch(String name) throws JSONException {
+    String url = "http://192.168.1.69:8080/android/punch";
     JSONObject jsonBody = new JSONObject();
-    jsonBody.put("Title", 1);
-    jsonBody.put("Author", 1);
+    jsonBody.put("name", name);
     final String requestBody = jsonBody.toString();
 
     StringRequest stringRequest = new StringRequest(
@@ -438,23 +431,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                     cropW, cropH,
                     sensorOrientation, MAINTAIN_ASPECT);
 
-//    frameToCropTransform =
-//            ImageUtils.getTransformationMatrix(
-//                    previewWidth, previewHeight,
-//                    previewWidth, previewHeight,
-//                    sensorOrientation, MAINTAIN_ASPECT);
-
     cropToFrameTransform = new Matrix();
     frameToCropTransform.invert(cropToFrameTransform);
-
 
     Matrix frameToPortraitTransform =
             ImageUtils.getTransformationMatrix(
                     previewWidth, previewHeight,
                     targetW, targetH,
                     sensorOrientation, MAINTAIN_ASPECT);
-
-
 
     trackingOverlay = (OverlayView) findViewById(R.id.tracking_overlay);
     trackingOverlay.addCallback(
@@ -512,7 +496,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                         new Runnable() {
                           @Override
                           public void run() {
-                            onFacesDetected(currTimestamp, faces, addPending);
+                            onFacesDetected(currTimestamp, faces, addPending, scanFaces);
                             addPending = false;
                           }
                         });
@@ -585,40 +569,41 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   }
 
   private void showAddFaceDialog(SimilarityClassifier.Recognition rec){
-
+    scanFaces = false;
     AlertDialog.Builder builder = new AlertDialog.Builder(this);
     LayoutInflater inflater = getLayoutInflater();
     View dialogLayout = inflater.inflate(R.layout.image_edit_dialog, null);
     ImageView ivFace = dialogLayout.findViewById(R.id.dlg_image);
-    TextView tvTitle = dialogLayout.findViewById(R.id.dlg_title);
-    EditText etName = dialogLayout.findViewById(R.id.dlg_input);
+    EditText etName = dialogLayout.findViewById(R.id.dlg_name);
+    EditText etPosition = dialogLayout.findViewById(R.id.dlg_position);
 
-    tvTitle.setText("Enroll employee");
     ivFace.setImageBitmap(rec.getCrop());
     etName.setHint("Employee Name");
+    etPosition.setHint("Position");
 
     builder.setPositiveButton("OK", new DialogInterface.OnClickListener(){
       @Override
-      public void onClick(DialogInterface dlg, int i){
-
+      public void onClick(DialogInterface dlg, int i) {
           String name = etName.getText().toString();
-          if (name.isEmpty()) {
-              return;
-          }
-          //detector.register(name, rec); // Saving the face into a hash list
+          String position = etPosition.getText().toString();
+
+          if (name.isEmpty()) return;
+          if (position.isEmpty()) return;
+
           try {
-            RegisterFace(name, rec);
+            RegisterFace(name, position, rec);
+            finish();
+            startActivity(getIntent());
           }
           catch (JSONException err) {
 
           }
-          //knownFaces.put(name, rec);
-          dlg.dismiss();
+        scanFaces = true;
+        dlg.dismiss();
       }
     });
     builder.setView(dialogLayout);
     builder.show();
-
   }
 
   private void updateResults(long currTimestamp, final List<SimilarityClassifier.Recognition> mappedRecognitions) {
@@ -626,8 +611,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     tracker.trackResults(mappedRecognitions, currTimestamp);
     trackingOverlay.postInvalidate();
     computingDetection = false;
-    //adding = false;
-
 
     if (mappedRecognitions.size() > 0) {
        LOGGER.i("Adding results");
@@ -636,6 +619,13 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
          showAddFaceDialog(rec);
        }
 
+       // Commentthis if app is for registration
+       try{
+         punch(rec.getTitle());
+         finish();
+         startActivity(getIntent());
+       }
+       catch (JSONException e){ }
     }
 
     runOnUiThread(
@@ -647,11 +637,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                 showInference(lastProcessingTimeMs + "ms");
               }
             });
-
   }
 
-  private void onFacesDetected(long currTimestamp, List<Face> faces, boolean add) {
-
+  private void onFacesDetected(long currTimestamp, List<Face> faces, boolean add, boolean scanFaces) {
+    if (scanFaces == false) return;
     cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
     final Canvas canvas = new Canvas(cropCopyBitmap);
     final Paint paint = new Paint();
@@ -668,9 +657,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     final List<SimilarityClassifier.Recognition> mappedRecognitions =
             new LinkedList<SimilarityClassifier.Recognition>();
-
-
-    //final List<Classifier.Recognition> results = new ArrayList<>();
 
     // Note this can be done only once
     int sourceW = rgbFrameBitmap.getWidth();
@@ -731,10 +717,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
         if (add) {
           crop = Bitmap.createBitmap(portraitBmp,
-                            (int) faceBB.left,
-                            (int) faceBB.top,
-                            (int) faceBB.width(),
-                            (int) faceBB.height());
+                  (int) faceBB.left,
+                  (int) faceBB.top,
+                  (int) faceBB.width(),
+                  (int) faceBB.height());
         }
 
         final long startTime = SystemClock.uptimeMillis();
@@ -742,14 +728,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
 
         if (resultsAux.size() > 0) {
-
           SimilarityClassifier.Recognition result = resultsAux.get(0);
-
           extra = result.getExtra();
-//          Object extra = result.getExtra();
-//          if (extra != null) {
-//            LOGGER.i("embeeding retrieved " + extra.toString());
-//          }
 
           float conf = result.getDistance();
           if (conf < 1.0f) {
@@ -758,12 +738,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             label = result.getTitle();
             if (result.getId().equals("0")) {
               color = Color.GREEN;
-            }
-            else {
+            } else {
               color = Color.RED;
             }
           }
-
         }
 
         if (getCameraFacing() == CameraCharacteristics.LENS_FACING_FRONT) {
@@ -773,8 +751,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
           Matrix flip = new Matrix();
           if (sensorOrientation == 90 || sensorOrientation == 270) {
             flip.postScale(1, -1, previewWidth / 2.0f, previewHeight / 2.0f);
-          }
-          else {
+          } else {
             flip.postScale(-1, 1, previewWidth / 2.0f, previewHeight / 2.0f);
           }
           //flip.postScale(1, -1, targetW / 2.0f, targetH / 2.0f);
@@ -792,11 +769,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         mappedRecognitions.add(result);
       }
     }
-
-    //    if (saved) {
-    //      lastSaved = System.currentTimeMillis();
-    //    }
-
     updateResults(currTimestamp, mappedRecognitions);
   }
 }
