@@ -330,13 +330,13 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             new Response.Listener<String>() {
               @Override
               public void onResponse(String response) {
-                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG).show();
+                Toast.makeText(DetectorActivity.this, "Success", Toast.LENGTH_LONG).show();
               }
             },
             new Response.ErrorListener() {
               @Override
               public void onErrorResponse(VolleyError error) {
-                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
+                Toast.makeText(DetectorActivity.this, "Failed to recognize", Toast.LENGTH_LONG ).show();
               }
             }
     ) {
@@ -454,7 +454,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     tracker.setFrameConfiguration(previewWidth, previewHeight, sensorOrientation);
   }
-
 
   @Override
   protected void processImage() {
