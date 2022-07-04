@@ -122,8 +122,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private Bitmap cropCopyBitmap = null;
 
   private boolean computingDetection = false;
-  private boolean addPending = false;
-  private boolean scanFaces = true;
   private long timestamp = 0;
 
   private Matrix frameToCropTransform;
@@ -152,25 +150,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
 
-    fabAdd = findViewById(R.id.fab_add);
-    fabAdd.setOnClickListener(new View.OnClickListener() {
-      @Override
-      public void onClick(View view) {onAddClick();}
-    });
-
-    reqBt = findViewById(R.id.request_button);
-    reqBt.setOnClickListener( new View.OnClickListener() {
-      @Override
-      public void onClick(View view) {
-        try {
-          punch("Kyla Musngi");
-        }
-        catch (JSONException e) {
-
-        }
-      }
-    });
-
     // Real-time contour detection of multiple faces
     FaceDetectorOptions options =
             new FaceDetectorOptions.Builder()
@@ -183,12 +162,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     FaceDetector detector = FaceDetection.getClient(options);
     faceDetector = detector;
     GetRegisteredFaces();
-  }
-
-
-  private void onAddClick() {
-    addPending = true;
-    // Toast.makeText(this, "click", Toast.LENGTH_LONG ).show();
   }
 
   // GET sample
@@ -243,75 +216,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             new Response.ErrorListener() {
               @Override
               public void onErrorResponse(VolleyError error) {
-                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
+                Toast.makeText(DetectorActivity.this, "Failed to fetch registered faces, please check your network", Toast.LENGTH_LONG ).show();
               }
             });
-
-    RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
-    requestQueue.add(stringRequest);
-  }
-
-  // POST sample
-  private void RegisterFace(String name, String position, SimilarityClassifier.Recognition rec) throws JSONException {
-    String url = "http://192.168.1.69:8080/android/register";
-    JSONObject jsonBody = new JSONObject();
-    jsonBody.put("name", name);
-    jsonBody.put("position", position);
-    jsonBody.put("id", rec.getId().toString());
-    jsonBody.put("title", name);
-    jsonBody.put("distance", rec.getDistance().toString());
-
-    RectF location = rec.getLocation();
-    jsonBody.put("left", location.left);
-    jsonBody.put("right", location.right);
-    jsonBody.put("bottom", location.bottom);
-    jsonBody.put("top", location.top);
-
-    Gson gson = new Gson();
-    String json = gson.toJson(rec.getExtra());
-    jsonBody.put("extra", json);
-
-    final String requestBody = jsonBody.toString();
-
-    StringRequest stringRequest = new StringRequest(
-            Request.Method.POST,
-            url,
-            new Response.Listener<String>() {
-              @Override
-              public void onResponse(String response) {
-                Toast.makeText(DetectorActivity.this, response, Toast.LENGTH_LONG).show();
-              }
-            },
-            new Response.ErrorListener() {
-              @Override
-              public void onErrorResponse(VolleyError error) {
-                Toast.makeText(DetectorActivity.this, error.toString(), Toast.LENGTH_LONG ).show();
-              }
-            }
-    ) {
-        @Override
-        public String getBodyContentType() {
-          return "application/json; charset=utf-8";
-        }
-        @Override
-        public byte[] getBody() throws AuthFailureError {
-          try {
-            return requestBody == null ? null : requestBody.getBytes("utf-8");
-          } catch (UnsupportedEncodingException uee) {
-            VolleyLog.wtf("Unsupported Encoding while trying to get the bytes of %s using %s", requestBody, "utf-8");
-            return null;
-          }
-        }
-        @Override
-        protected Response<String> parseNetworkResponse(NetworkResponse response) {
-          String responseString = "";
-          if (response != null) {
-            responseString = String.valueOf(response.statusCode);
-            // can get more details such as response.headers
-          }
-          return Response.success(responseString, HttpHeaderParser.parseCacheHeaders(response));
-        }
-      };
 
     RequestQueue requestQueue = Volley.newRequestQueue(DetectorActivity.this);
     requestQueue.add(stringRequest);
@@ -331,6 +238,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
               @Override
               public void onResponse(String response) {
                 Toast.makeText(DetectorActivity.this, "Success", Toast.LENGTH_LONG).show();
+                /*final Handler punchHandler = new Handler();
+                punchHandler.postDelayed(new Runnable() {
+                  @Override
+                  public void run() {
+                    finish();
+                    startActivity(getIntent());
+                  }
+                }, 2000);*/
               }
             },
             new Response.ErrorListener() {
@@ -495,8 +410,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                         new Runnable() {
                           @Override
                           public void run() {
-                            onFacesDetected(currTimestamp, faces, addPending, scanFaces);
-                            addPending = false;
+                            onFacesDetected(currTimestamp, faces);
                           }
                         });
               }
@@ -567,44 +481,6 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   }
 
-  private void showAddFaceDialog(SimilarityClassifier.Recognition rec){
-    scanFaces = false;
-    AlertDialog.Builder builder = new AlertDialog.Builder(this);
-    LayoutInflater inflater = getLayoutInflater();
-    View dialogLayout = inflater.inflate(R.layout.image_edit_dialog, null);
-    ImageView ivFace = dialogLayout.findViewById(R.id.dlg_image);
-    EditText etName = dialogLayout.findViewById(R.id.dlg_name);
-    EditText etPosition = dialogLayout.findViewById(R.id.dlg_position);
-
-    ivFace.setImageBitmap(rec.getCrop());
-    etName.setHint("Employee Name");
-    etPosition.setHint("Position");
-
-    builder.setPositiveButton("OK", new DialogInterface.OnClickListener(){
-      @Override
-      public void onClick(DialogInterface dlg, int i) {
-          String name = etName.getText().toString();
-          String position = etPosition.getText().toString();
-
-          if (name.isEmpty()) return;
-          if (position.isEmpty()) return;
-
-          try {
-            RegisterFace(name, position, rec);
-            finish();
-            startActivity(getIntent());
-          }
-          catch (JSONException err) {
-
-          }
-        scanFaces = true;
-        dlg.dismiss();
-      }
-    });
-    builder.setView(dialogLayout);
-    builder.show();
-  }
-
   private void updateResults(long currTimestamp, final List<SimilarityClassifier.Recognition> mappedRecognitions) {
 
     tracker.trackResults(mappedRecognitions, currTimestamp);
@@ -614,17 +490,19 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     if (mappedRecognitions.size() > 0) {
        LOGGER.i("Adding results");
        SimilarityClassifier.Recognition rec = mappedRecognitions.get(0);
-       if (rec.getExtra() != null) {
-         showAddFaceDialog(rec);
-       }
 
-       // Commentthis if app is for registration
-       try{
-         punch(rec.getTitle());
-         finish();
-         startActivity(getIntent());
-       }
-       catch (JSONException e){ }
+      final Handler punchHandler = new Handler();
+      punchHandler.postDelayed(new Runnable() {
+        @Override
+        public void run() {
+          try {
+            punch(rec.getTitle());
+            finish();
+            startActivity(getIntent());
+          }
+          catch (JSONException e){ }
+        }
+      }, 2000);
     }
 
     runOnUiThread(
@@ -638,8 +516,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             });
   }
 
-  private void onFacesDetected(long currTimestamp, List<Face> faces, boolean add, boolean scanFaces) {
-    if (scanFaces == false) return;
+  private void onFacesDetected(long currTimestamp, List<Face> faces) {
     cropCopyBitmap = Bitmap.createBitmap(croppedBitmap);
     final Canvas canvas = new Canvas(cropCopyBitmap);
     final Paint paint = new Paint();
@@ -714,16 +591,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         Object extra = null;
         Bitmap crop = null;
 
-        if (add) {
-          crop = Bitmap.createBitmap(portraitBmp,
-                  (int) faceBB.left,
-                  (int) faceBB.top,
-                  (int) faceBB.width(),
-                  (int) faceBB.height());
-        }
-
         final long startTime = SystemClock.uptimeMillis();
-        final List<SimilarityClassifier.Recognition> resultsAux = detector.recognizeImage(faceBmp, add);
+        final List<SimilarityClassifier.Recognition> resultsAux = detector.recognizeImage(faceBmp, false);
         lastProcessingTimeMs = SystemClock.uptimeMillis() - startTime;
 
         if (resultsAux.size() > 0) {
